@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Scatter Plot</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-gl/dist/echarts-gl.min.js"></script>
+</head>
+
+<body>
+    <div id="chart" style="width: 100%; height: 600px;"></div>
+
+    <script>
+        // 转换经纬度的函数
+        function convertDMS(dms) {
+            const parts = dms.match(/(\d+)[°](\d+)['](\d+\.?\d*)["]/);
+            if (!parts) {
+                console.error("Invalid DMS format: " + dms);
+                return 0;
+            }
+            return parseInt(parts[1]) + parseInt(parts[2]) / 60 + parseFloat(parts[3]) / 3600;
+        }
+
+        // 颜色处理函数
+        function getColor(landform) {
+            if (landform.includes("方")) {
+                return '#A52A2A';  // 砖红色
+            } else if (landform.includes("水")) {
+                return '#00CED1';  // 水绿色
+            } else if (landform.includes("滩涂")) {
+                return '#808080';  // 灰色
+            } else if (landform.includes("土")) {
+                return '#DEB887';  // 土黄色
+            } else {
+                return '#228B22';  // 叶绿色
+            }
+        }
+
+        // 透明度处理函数
+        function getOpacity(type) {
+            if (!type) {
+                return 0.3; // 无值 20%
+            } else if (type.includes("护墙")) {
+                return 0.4; // 护墙 30%
+            } else if (type.includes("祭坛")) {
+                return 0.9; // 祭坛 90%
+            } else if (type.includes("墓")) {
+                return 0.7; // 墓 70%
+            } else if (type.includes("居")) {
+                return 0.5; // 居 50%
+            } else {
+                return 0.3; // 其他 20%
+            }
+        }
+
+        // 读取CSV文件并处理数据
+        function loadCSV() {
+            fetch('data.csv')
+                .then(response => response.text())
+                .then(data => {
+                    const lines = data.trim().split('\n').slice(1); // 跳过标题行
+                    const coordinates = lines.map(line => {
+                        const parts = line.split(',');
+                        const latLon = parts[6].match(/(\d+°\d+'\d+\.?\d*""\d+°\d+'\d+\.?\d*"")/); // 解析连在一起的经纬度
+
+                        if (!latLon || latLon.length < 1) {
+                            console.error("Invalid lat/lon format: " + parts[6]);
+                            return null;
+                        }
+
+                        // 拆分经纬度字符串
+                        const longitudeStr = latLon[0].slice(0, latLon[0].indexOf('"') + 1); // 提取经度部分
+                        const latitudeStr = latLon[0].slice(latLon[0].indexOf('"') + 1); // 提取纬度部分
+
+                        const latitude = convertDMS(latitudeStr);
+                        const longitude = convertDMS(longitudeStr);
+                        const relativeHeight = parseFloat(parts[5]);
+                        const landform = parts[3];
+                        const knownType = parts[2];
+
+                        return {
+                            name: parts[1],
+                            value: [longitude, latitude, relativeHeight],
+                            area: parseFloat(parts[4]),
+                            color: getColor(landform),
+                            opacity: getOpacity(knownType)
+                        };
+                    }).filter(item => item !== null); // 过滤掉无效的数据
+
+                    // 渲染图表
+                    renderChart(coordinates);
+                })
+                .catch(error => console.error('Error loading CSV:', error));
+        }
+
+        // 渲染3D散点图
+        function renderChart(data) {
+            var chart = echarts.init(document.getElementById('chart'));
+            var option = {
+                tooltip: {},
+                xAxis3D: {
+                    type: 'value',
+                    name:"",
+                    min: 119.94,  // 调整x轴范围为小数后两位
+                    max: 120.06,
+                    name:"",
+                    axisLabel: {
+                        opacity: 0,  // 设置标签透明度为0
+                    },
+                    splitLine: {
+                        lineStyle: {
+                            opacity: 0,  // 设置网格线透明度为0
+                        },
+                    },
+                    axisLine: {
+                        lineStyle: {
+                            opacity: 0,  // 隐藏坐标轴线
+                        },
+                    },
+                },
+                yAxis3D: {
+                    type: 'value',
+                    min: 30.45,  // 调整y轴范围为小数后两位
+                    max: 30.36,
+                    name:"",
+                    axisLabel: {
+                        opacity: 0,  // 设置标签透明度为0
+                    },
+                    splitLine: {
+                        lineStyle: {
+                            opacity: 0,  // 设置网格线透明度为0
+                        },
+                    },
+                    axisLine: {
+                        lineStyle: {
+                            opacity: 0,  // 隐藏坐标轴线
+                        },
+                    },
+                },
+                zAxis3D: {
+                    type: 'value',
+                    name:"",
+                    axisLabel: {
+                        opacity: 0,  // 设置标签透明度为0
+                    },
+                    splitLine: {
+                        lineStyle: {
+                            opacity: 0,  // 设置网格线透明度为0
+                        },
+                    },
+                    axisLine: {
+                        lineStyle: {
+                            opacity: 0,  // 隐藏坐标轴线
+                        },
+                    },
+                },
+                grid3D: {
+                    opacity: 0,  // 设置网格透明度为0
+                    boxHeight: 30,
+                    viewControl: {
+                        projection: 'orthographic'
+                    }
+                },
+                series: [{
+                    type: 'scatter3D',
+                    data: data.map(item => ({
+                        value: item.value,
+                        symbolSize: Math.sqrt(item.area) * 0.1, // 根据面积调整大小
+                        itemStyle: {
+                            color: item.color,
+                            opacity: item.opacity
+                        }
+                    }))
+                }]
+            };
+            chart.setOption(option);
+        }
+
+
+        loadCSV();
+    </script>
+</body>
+
+</html>
